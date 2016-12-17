@@ -1,10 +1,18 @@
+# -*- coding: utf-8 -*-
+
 import sys
 import getopt
 import re
+import string
+
 from pdfminer.pdfparser import PDFParser, PDFDocument
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import PDFPageAggregator
 from pdfminer.layout import LAParams, LTTextBox, LTTextLine
+
+from nltk import FreqDist
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize, sent_tokenize
 
 def usage(executable):
 	print("""
@@ -36,13 +44,17 @@ class PeaceWordCloud():
 
 	def __init__(self, pdf_file, filters_file):
 		"""
-		This function creates the PeaceWordCloud object and begins the processing
+		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		re_filters = self.read_filters_file(filters_file)
 		text = self.read_pdf_file(pdf_file, re_filters)
-		print(text[0:2000])
+		frecuencies = self.frequency_analysis(text)
+		print(frecuencies)
 
 	def read_filters_file(self, filters_file):
+		"""
+		This function reads a file that defines a list of regex.
+		"""
 		re_filters = []
 		if filters_file != None:
 			fp = open (filters_file,'r')
@@ -105,6 +117,28 @@ class PeaceWordCloud():
 
 		print("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
 		return file_contents
+
+	def frequency_analysis(self, file_contents):
+		"""
+		This function uses the NLTK library to make a frecuency analisis.
+		"""
+		# The punctuation variable has the following caracters: !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~¡¿”“•\r´
+		punctuation = string.punctuation + '¡¿”“•\r´'
+		# Filters the punctuation marks and lowers all the words
+		transtable = file_contents.maketrans('', '', punctuation)
+		pdt_string = file_contents.translate(transtable)
+		pdt_string = pdt_string.lower()
+
+		# Return a tokenized copy of "pdt_string", using NLTK's recommended word tokenizer
+		tokens = word_tokenize(pdt_string)
+
+		# Filters the spanish stopwords (hemos, están, estuvimos, etc.)
+		stopwords_esp = stopwords.words('spanish')
+		tokens = [w for w in tokens if w not in stopwords_esp]
+
+		# Gets the most common words
+		frecuencies = FreqDist(tokens).most_common()
+		return frecuencies
 
 if __name__ == "__main__":
 	# Process all the program arguments
