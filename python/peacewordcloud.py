@@ -42,10 +42,11 @@ class PeaceWordCloud():
 	This class processes a PDF file and generates a Wordcloud using PDFMiner.
 	"""
 
-	def __init__(self, pdf_file, filters_file):
+	def __init__(self, pdf_file, filters_file, verbose):
 		"""
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
+		self.verbose = verbose
 		re_filters = self.read_filters_file(filters_file)
 		text = self.read_pdf_file(pdf_file, re_filters)
 		frecuencies = self.frequency_analysis(text)
@@ -63,7 +64,7 @@ class PeaceWordCloud():
 				re_filters.append(re.compile(string_filter[:-1]))
 				string_filter = fp.readline()
 			fp.close()
-		print("FILTERS: ", re_filters)
+		self.printv("FILTERS: ", re_filters)
 		return re_filters
 	
 	def read_pdf_file(self, pdf_file, re_filters):
@@ -109,13 +110,13 @@ class PeaceWordCloud():
 				if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
 					for re_filter in re_filters:
 						if re_filter.match(lt_obj.get_text()) != None:
-							print("FILTERING:", lt_obj.get_text())
+							self.printv("FILTERING:", lt_obj.get_text())
 							matches_filter = True
 							break
 					if not matches_filter:
 						file_contents += lt_obj.get_text()
 
-		print("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
+		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
 		return file_contents
 
 	def frequency_analysis(self, file_contents):
@@ -140,10 +141,14 @@ class PeaceWordCloud():
 		frecuencies = FreqDist(tokens).most_common()
 		return frecuencies
 
+	def printv(self, *text):
+		if self.verbose == True:
+			print(text)
+
 if __name__ == "__main__":
 	# Process all the program arguments
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "ho:f:", ["help", "output=", "filters="])
+		opts, args = getopt.getopt(sys.argv[1:], "vho:f:", ["help", "output=", "filters="])
 	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err))  # will print something like "option -a not recognized"
@@ -151,6 +156,7 @@ if __name__ == "__main__":
 		sys.exit(2)
 
 	# Defines the necessary variables
+	verbose = False
 	output_file = None
 	filter_file = None
 	for option, value in opts:
@@ -159,6 +165,8 @@ if __name__ == "__main__":
 			sys.exit()
 		elif option in ("-o", "--output"):
 			output_file = value
+		elif option in ("-v", "--verbose"):
+			verbose = True
 		elif option in ("-f", "--filters"):
 			filter_file = value
 		else:
@@ -171,4 +179,4 @@ if __name__ == "__main__":
 		sys.exit(2)
 
 	# Begins the program
-	PeaceWordCloud(args[0], filter_file)
+	PeaceWordCloud(args[0], filter_file, verbose)
