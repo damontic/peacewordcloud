@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 # Standard library imports
+import os
 import sys
 import getopt
 import re
 import string
-from os import path
 
 # PDFMiner imports
 from pdfminer.pdfparser import PDFParser, PDFDocument
@@ -16,7 +16,7 @@ from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 # NLTK imports
 from nltk import FreqDist
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tokenize import MWETokenizer
 
 # PIL imports
 from PIL import Image
@@ -28,7 +28,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # wordcloud imports
-from wordcloud import WordCloud, STOPWORDS
+from wordcloud import WordCloud
 
 def usage():
 	print("""
@@ -47,7 +47,11 @@ OPTIONS:
 
 \t-f, --filter=FILE
 \t\tSpecifies a file with filters If no file is specified, no filters are used.
-\t\tThe filters file defines a filter per line. Each filter must be a word in LOWERCASE.
+\t\tThe filters file defines a filter per line.
+
+\t-g, --groups=FILE
+\t\tSpecifies a file with groups of words. If no file is specified, no groups are used.
+\t\tThe groups file defines a group of words per line.
 
 \t-h, --help
 \t\tPrints the usage and exits.
@@ -59,28 +63,39 @@ class PeaceWordCloud():
 	This class processes a PDF file and generates a Wordcloud using PDFMiner.
 	"""
 
-	def __init__(self, pdf_file, filters_file, base_image, output_file, verbose):
+	def __init__(self, pdf_file, filters_file, base_image, output_file, groups_file, max_words, verbose):
 		"""
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		self.verbose = verbose
-		filters = self.read_filters_file(filters_file)
-		text = self.read_pdf_file(pdf_file)
-		#(frecuencies, tokens) = self.frequency_analysis(text)
-		curated_text = self.remove_punctuation(text)
-		self.create_image(base_image, text, output_file, filters)
+		groups = self.read_file_as_lower(group_file)
+		self.printv("GROUPS:", groups)
+		filters = self.read_file_as_lower(filters_file)
+		self.printv("FILTERS:", filters)
 
-	def read_filters_file(self, filters_file):
+		text = self.read_pdf_file(pdf_file)
+		text = self.remove_punctuation(text).lower()
+
+		frecuencies = self.frequency_analysis(text, groups)
+
+		self.create_image(base_image, frecuencies, output_file, filters, max_words)
+
+	def read_file_as_lower(self, current_file):
 		"""
-		This function reads a file that defines a list of regex.
+		This function reads a file and returns a list of lines in lowercase.
 		"""
-		filters = []
-		if filters_file != None:
-			fp = open (filters_file,'r')
-			filters = fp.readlines()
+		def lowers_removes_linesep(some_string):
+			if some_string.endswith(os.linesep):
+				some_string = some_string[:-1]
+			return some_string.lower()
+
+		lines = []
+		if current_file != None:
+			fp = open (current_file,'r')
+			lines = fp.readlines()
 			fp.close()
-		self.printv("FILTERS: ", filters)
-		return filters
+			lines = [ lowers_removes_linesep(line) for line in lines ]
+		return lines
 	
 	def read_pdf_file(self, pdf_file):
 		"""
@@ -128,51 +143,62 @@ class PeaceWordCloud():
 		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
 		return file_contents
 
-	def frequency_analysis(self, file_contents):
+	def frequency_analysis(self, file_contents, groups):
 		"""
 		This function uses the NLTK library to make a frecuency analisis.
+		Uses groups as tokens.
 		"""
-		pdf_string = remove_punctuation(file_contents)
+		pdf_string = self.remove_punctuation(file_contents)
 
 		# Return a tokenized copy of "pdt_string", using NLTK's recommended word tokenizer
-		tokens = word_tokenize(pdf_string)
+		tokenizer = MWETokenizer()
+		for group in groups:
+			tokenizer.add_mwe(group.split(" "))
+		tokens = tokenizer.tokenize(pdf_string.split())
 
 		# Filters the spanish stopwords (hemos, están, estuvimos, etc.)
 		stopwords_esp = stopwords.words('spanish')
 		tokens = [w for w in tokens if w not in stopwords_esp]
 
 		# Gets the most common words
-		frecuencies = FreqDist(tokens).most_common()
-		return (frecuencies, tokens)
+		return FreqDist(tokens).most_common()
 
-	def create_image(self, base_image, text, output_file, filters):
+	def create_image(self, base_image, frequencies, output_file, filters, maximum_words):
+		"""
+		This function creates the image with the wordcloud.
+		"""
 		# Read the mask image
-		acuerdo_mask = np.array(Image.open(base_image))
+		base_image_mask = np.array(Image.open(base_image))
 
-		wc = WordCloud(background_color="white", max_words=2000, mask=acuerdo_mask, stopwords=set(stopwords.words("spanish")+filters))
+		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask, stopwords=set(stopwords.words("spanish")+filters))
 
 		# Generate word cloud
-		wc.generate(text)
+		wc.generate_from_frequencies(frequencies)
 
 		# Store to file
 		wc.to_file(output_file)
 
 	def remove_punctuation(self, text):
+		"""
+		This function removes all the punctuation marks from text.
+		"""
 		# The punctuation variable has the following caracters: !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~¡¿”“•\r´
 		punctuation = string.punctuation + '¡¿”“•\r´'
 		# Filters the punctuation marks and lowers all the words
 		transtable = text.maketrans('', '', punctuation)
-		pdt_string = text.translate(transtable)
-		return pdt_string.lower()
+		return text.translate(transtable)
 
 	def printv(self, *text):
+		"""
+		This is an utility function to call print when the verbosity is on.
+		"""
 		if self.verbose == True:
 			print(text)
 
 if __name__ == "__main__":
 	# Process all the program arguments
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:", ["help", "output=", "filters="])
+		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:g:m:", ["verbose","help", "output=", "filters=", "pdf=", "base=", "groups=", "max="])
 	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err))  # will print something like "option -a not recognized"
@@ -183,8 +209,10 @@ if __name__ == "__main__":
 	verbose = False
 	output_file = "wordcloud.png"
 	filter_file = None
+	group_file = None
 	base_image = None
 	pdf_file = None
+	max_words = 2000
 	for option, value in opts:
 		if option in ("-h", "--help"):
 			usage()
@@ -199,6 +227,13 @@ if __name__ == "__main__":
 			verbose = True
 		elif option in ("-f", "--filters"):
 			filter_file = value
+		elif option in ("-g", "--groups"):
+			group_file = value
+		elif option in ("-m", "--max"):
+			try:
+				max_words = int(value)
+			except ValueError:
+				print("-m or --max must be a number. Taking 2000 as default.")
 		else:
 			assert False, "unhandled option"
 
@@ -209,4 +244,4 @@ if __name__ == "__main__":
 		sys.exit(2)
 
 	# Begins the program
-	PeaceWordCloud(pdf_file, filter_file, base_image, output_file, verbose)
+	PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, max_words, verbose)
