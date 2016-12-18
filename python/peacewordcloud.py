@@ -53,6 +53,9 @@ OPTIONS:
 \t\tSpecifies a file with groups of words. If no file is specified, no groups are used.
 \t\tThe groups file defines a group of words per line.
 
+\t-m, --max=NUMBER
+\t\tSpecifies a maximum number of words to be drawn on the wordcloud. Defaults to 2000.
+
 \t-h, --help
 \t\tPrints the usage and exits.
 
