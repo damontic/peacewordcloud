@@ -1,25 +1,47 @@
 # -*- coding: utf-8 -*-
 
+# Standard library imports
 import sys
 import getopt
 import re
 import string
+from os import path
 
+# PDFMiner imports
 from pdfminer.pdfparser import PDFParser, PDFDocument
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import PDFPageAggregator
 from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 
+# NLTK imports
 from nltk import FreqDist
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 
-def usage(executable):
+# PIL imports
+from PIL import Image
+
+# numpy imports
+import numpy as np
+
+# matplotlib imports
+import matplotlib.pyplot as plt
+
+# wordcloud imports
+from wordcloud import WordCloud, STOPWORDS
+
+def usage():
 	print("""
 USAGE:
-\tpython""", executable, """[OPTIONS] input_file.pdf
+\tpython""", sys.argv[0], """[OPTIONS] -p input_file.pdf -b base_image.png
 
 OPTIONS:
+\t-p, --pdf=FILE
+\t\tSpecifies the name of the pdf input file to be processed. This option is mandatory.
+
+\t-b, --base=FILE
+\t\tSpecifies the name of the image file to be used. This option is mandatory.
+
 \t-o, --output=FILE
 \t\tSpecifies the name of the generated image. If the option is not specified the default filename wordcloud.png is used.
 
@@ -42,15 +64,16 @@ class PeaceWordCloud():
 	This class processes a PDF file and generates a Wordcloud using PDFMiner.
 	"""
 
-	def __init__(self, pdf_file, filters_file, verbose):
+	def __init__(self, pdf_file, filters_file, base_image, output_file, verbose):
 		"""
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		self.verbose = verbose
 		re_filters = self.read_filters_file(filters_file)
 		text = self.read_pdf_file(pdf_file, re_filters)
-		frecuencies = self.frequency_analysis(text)
-		print(frecuencies)
+		#(frecuencies, tokens) = self.frequency_analysis(text)
+		curated_text = self.remove_punctuation(text)
+		self.create_image(base_image, text, output_file)
 
 	def read_filters_file(self, filters_file):
 		"""
@@ -116,6 +139,7 @@ class PeaceWordCloud():
 					if not matches_filter:
 						file_contents += lt_obj.get_text()
 
+		fp.close()
 		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
 		return file_contents
 
@@ -123,15 +147,10 @@ class PeaceWordCloud():
 		"""
 		This function uses the NLTK library to make a frecuency analisis.
 		"""
-		# The punctuation variable has the following caracters: !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~¡¿”“•\r´
-		punctuation = string.punctuation + '¡¿”“•\r´'
-		# Filters the punctuation marks and lowers all the words
-		transtable = file_contents.maketrans('', '', punctuation)
-		pdt_string = file_contents.translate(transtable)
-		pdt_string = pdt_string.lower()
+		pdf_string = remove_punctuation(file_contents)
 
 		# Return a tokenized copy of "pdt_string", using NLTK's recommended word tokenizer
-		tokens = word_tokenize(pdt_string)
+		tokens = word_tokenize(pdf_string)
 
 		# Filters the spanish stopwords (hemos, están, estuvimos, etc.)
 		stopwords_esp = stopwords.words('spanish')
@@ -139,7 +158,27 @@ class PeaceWordCloud():
 
 		# Gets the most common words
 		frecuencies = FreqDist(tokens).most_common()
-		return frecuencies
+		return (frecuencies, tokens)
+
+	def create_image(self, base_image, text, output_file):
+		# Read the mask image
+		acuerdo_mask = np.array(Image.open(base_image))
+
+		wc = WordCloud(background_color="white", max_words=2000, mask=acuerdo_mask, stopwords=set(stopwords.words("spanish")))
+
+		# Generate word cloud
+		wc.generate(text)
+
+		# Store to file
+		wc.to_file(output_file)
+
+	def remove_punctuation(self, text):
+		# The punctuation variable has the following caracters: !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~¡¿”“•\r´
+		punctuation = string.punctuation + '¡¿”“•\r´'
+		# Filters the punctuation marks and lowers all the words
+		transtable = text.maketrans('', '', punctuation)
+		pdt_string = text.translate(transtable)
+		return pdt_string.lower()
 
 	def printv(self, *text):
 		if self.verbose == True:
@@ -148,21 +187,27 @@ class PeaceWordCloud():
 if __name__ == "__main__":
 	# Process all the program arguments
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "vho:f:", ["help", "output=", "filters="])
+		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:", ["help", "output=", "filters="])
 	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err))  # will print something like "option -a not recognized"
-		usage(sys.argv[0])
+		usage()
 		sys.exit(2)
 
 	# Defines the necessary variables
 	verbose = False
-	output_file = None
+	output_file = "wordcloud.png"
 	filter_file = None
+	base_image = None
+	pdf_file = None
 	for option, value in opts:
 		if option in ("-h", "--help"):
-			usage(sys.argv[0])
+			usage()
 			sys.exit()
+		elif option in ("-b", "--base"):
+			base_image = value
+		elif option in ("-p", "--pdf"):
+			pdf_file = value
 		elif option in ("-o", "--output"):
 			output_file = value
 		elif option in ("-v", "--verbose"):
@@ -172,11 +217,11 @@ if __name__ == "__main__":
 		else:
 			assert False, "unhandled option"
 
-	# Checks the pdf name
-	if len(args) == 0:
-		print("A pdf file should have been passed as an argument.")
-		usage(sys.argv[0])
+	# Checks the pdf name and the base image
+	if pdf_file == None or base_image == None:
+		print("The options -b and -p are mandatory.")
+		usage()
 		sys.exit(2)
 
 	# Begins the program
-	PeaceWordCloud(args[0], filter_file, verbose)
+	PeaceWordCloud(pdf_file, filter_file, base_image, output_file, verbose)
