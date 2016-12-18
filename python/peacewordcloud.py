@@ -47,12 +47,7 @@ OPTIONS:
 
 \t-f, --filter=FILE
 \t\tSpecifies a file with filters If no file is specified, no filters are used.
-\t\tThe filters file defines a filter per line. Each filter is a Regular Expression.
-\te.g.:
-\t\t1) The filter 'Página' filters all the lines that match EXACTLY the word 'Página'
-\t\t2) The filter '^Página' filters all the lines that BEGINS with the word 'Página'
-\t\t3) The filter '.*Página.*' filters all the lines that CONTAIN the word 'Página'
-\t\t4) The filter 'Página$' filters all the lines that END with the word 'Página'
+\t\tThe filters file defines a filter per line. Each filter must be a word in LOWERCASE.
 
 \t-h, --help
 \t\tPrints the usage and exits.
@@ -69,28 +64,25 @@ class PeaceWordCloud():
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		self.verbose = verbose
-		re_filters = self.read_filters_file(filters_file)
-		text = self.read_pdf_file(pdf_file, re_filters)
+		filters = self.read_filters_file(filters_file)
+		text = self.read_pdf_file(pdf_file)
 		#(frecuencies, tokens) = self.frequency_analysis(text)
 		curated_text = self.remove_punctuation(text)
-		self.create_image(base_image, text, output_file)
+		self.create_image(base_image, text, output_file, filters)
 
 	def read_filters_file(self, filters_file):
 		"""
 		This function reads a file that defines a list of regex.
 		"""
-		re_filters = []
+		filters = []
 		if filters_file != None:
 			fp = open (filters_file,'r')
-			string_filter = fp.readline()
-			while string_filter != '':
-				re_filters.append(re.compile(string_filter[:-1]))
-				string_filter = fp.readline()
+			filters = fp.readlines()
 			fp.close()
-		self.printv("FILTERS: ", re_filters)
-		return re_filters
+		self.printv("FILTERS: ", filters)
+		return filters
 	
-	def read_pdf_file(self, pdf_file, re_filters):
+	def read_pdf_file(self, pdf_file):
 		"""
 		This function reads the PDF, obtains the words and merges them into a single string.
 		"""
@@ -129,15 +121,8 @@ class PeaceWordCloud():
 			interpreter.process_page(page)
 			layout = pdf_page_aggregator.get_result()
 			for lt_obj in layout:
-				matches_filter = False
 				if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
-					for re_filter in re_filters:
-						if re_filter.match(lt_obj.get_text()) != None:
-							self.printv("FILTERING:", lt_obj.get_text())
-							matches_filter = True
-							break
-					if not matches_filter:
-						file_contents += lt_obj.get_text()
+					file_contents += lt_obj.get_text()
 
 		fp.close()
 		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
@@ -160,11 +145,11 @@ class PeaceWordCloud():
 		frecuencies = FreqDist(tokens).most_common()
 		return (frecuencies, tokens)
 
-	def create_image(self, base_image, text, output_file):
+	def create_image(self, base_image, text, output_file, filters):
 		# Read the mask image
 		acuerdo_mask = np.array(Image.open(base_image))
 
-		wc = WordCloud(background_color="white", max_words=2000, mask=acuerdo_mask, stopwords=set(stopwords.words("spanish")))
+		wc = WordCloud(background_color="white", max_words=2000, mask=acuerdo_mask, stopwords=set(stopwords.words("spanish")+filters))
 
 		# Generate word cloud
 		wc.generate(text)
