@@ -33,7 +33,7 @@ from wordcloud import WordCloud
 def usage():
 	print("""
 USAGE:
-\tpython""", sys.argv[0], """[OPTIONS] -p input_file.pdf -b base_image.png
+\tpython""", sys.argv[0], """[OPTIONS] -p input_file.pdf -b base_image.png -o result.png
 
 OPTIONS:
 \t-p, --pdf=FILE
@@ -43,7 +43,7 @@ OPTIONS:
 \t\tSpecifies the name of the image file to be used. This option is mandatory.
 
 \t-o, --output=FILE
-\t\tSpecifies the name of the generated image. If the option is not specified the default filename wordcloud.png is used.
+\t\tSpecifies the name of the generated image. This option is mandatory.
 
 \t-f, --filter=FILE
 \t\tSpecifies a file with filters If no file is specified, no filters are used.
@@ -71,7 +71,7 @@ class PeaceWordCloud():
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		self.verbose = verbose
-		groups = self.read_file_as_lower(group_file)
+		groups = self.read_file_as_lower(groups_file)
 		self.printv("GROUPS:", groups)
 		filters = self.read_file_as_lower(filters_file)
 		self.printv("FILTERS:", filters)
@@ -210,7 +210,7 @@ if __name__ == "__main__":
 
 	# Defines the necessary variables
 	verbose = False
-	output_file = "wordcloud.png"
+	output_file = None
 	filter_file = None
 	group_file = None
 	base_image = None
@@ -241,8 +241,8 @@ if __name__ == "__main__":
 			assert False, "unhandled option"
 
 	# Checks the pdf name and the base image
-	if pdf_file == None or base_image == None:
-		print("The options -b and -p are mandatory.")
+	if pdf_file == None or base_image == None or output_file == None:
+		print("The options -b, -p and -o are mandatory.")
 		usage()
 		sys.exit(2)
 
