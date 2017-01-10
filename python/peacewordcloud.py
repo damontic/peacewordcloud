@@ -53,6 +53,9 @@ OPTIONS:
 \t\tSpecifies a file with groups of words. If no file is specified, no groups are used.
 \t\tThe groups file defines a group of words per line.
 
+\t-c, --csv=FILE
+\t\tSpecifies an output file with the frecuencies.
+
 \t-m, --max=NUMBER
 \t\tSpecifies a maximum number of words to be drawn on the wordcloud. Defaults to 2000.
 
@@ -66,7 +69,7 @@ class PeaceWordCloud():
 	This class processes a PDF file and generates a Wordcloud using PDFMiner.
 	"""
 
-	def __init__(self, pdf_file, filters_file, base_image, output_file, groups_file, max_words, verbose):
+	def __init__(self, pdf_file, filters_file, base_image, output_file, groups_file, csv_file, max_words, verbose):
 		"""
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
@@ -79,6 +82,7 @@ class PeaceWordCloud():
 		self.pdf_file = pdf_file
 		self.base_image = base_image
 		self.output_file = output_file
+		self.csv_file = csv_file
 		self.max_words = max_words
 
 	def run(self):
@@ -98,6 +102,10 @@ class PeaceWordCloud():
 		frecuencies = self.frequency_analysis(text, self.groups)
 
 		if len(frecuencies) != 0:
+
+			if self.csv_file != None:
+				self.export_csv(frecuencies)
+
 			self.create_image(self.base_image, frecuencies, self.output_file, self.filters, self.max_words)
 			return 0
 		else:
@@ -212,6 +220,15 @@ class PeaceWordCloud():
 		transtable = text.maketrans('', '', punctuation)
 		return text.translate(transtable)
 
+	def export_csv(self, frecuencies):
+		"""
+		This function creates a csv from the frecuencies.
+		"""
+		f = open(self.csv_file, "w")
+		for frecuency in frecuencies:
+			f.write(frecuency[0] + "," + str(frecuency[1]) + "\n")
+		f.close()
+
 	def printv(self, *text):
 		"""
 		This is an utility function to call print when the verbosity is on.
@@ -222,7 +239,7 @@ class PeaceWordCloud():
 if __name__ == "__main__":
 	# Process all the program arguments
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:g:m:", ["verbose","help", "output=", "filters=", "pdf=", "base=", "groups=", "max="])
+		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:g:m:c:", ["verbose","help", "output=", "filters=", "pdf=", "base=", "groups=", "max=", "csv="])
 	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err))  # will print something like "option -a not recognized"
@@ -236,6 +253,7 @@ if __name__ == "__main__":
 	group_file = None
 	base_image = None
 	pdf_file = None
+	csv_file = None
 	max_words = 2000
 	for option, value in opts:
 		if option in ("-h", "--help"):
@@ -253,6 +271,8 @@ if __name__ == "__main__":
 			filter_file = value
 		elif option in ("-g", "--groups"):
 			group_file = value
+		elif option in ("-c", "--csv"):
+			csv_file = value
 		elif option in ("-m", "--max"):
 			try:
 				max_words = int(value)
@@ -268,7 +288,7 @@ if __name__ == "__main__":
 		sys.exit(2)
 
 	# Begins the program
-	pwc = PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, max_words, verbose)
+	pwc = PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, csv_file, max_words, verbose)
 	result = pwc.run()
 	if result == 0:
 		print("SUCCESS!")
