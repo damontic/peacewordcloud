@@ -56,6 +56,11 @@ if __name__ == '__main__':
 			sys.exit()
 	print("Group File:", group_file)
 
+	csv_file = None
+	if askyesno("Select a CSV file", "Do you want to save a frecuency file as a CSV?"):
+		csv_file = asksaveasfilename() # show an "Open" dialog box and return the path to the selected file
+		print("CSV File:", csv_file)
+
 	max_words = None
 	if askyesno("Select a max_words number", "Do you want to set a maximum number of words?"):
 		max_words = askinteger("Maximum number of Words","max_words =") # show an "Open" dialog box and return the path to the selected file
@@ -64,4 +69,5 @@ if __name__ == '__main__':
 			max_words = 2000
 	print("Max Words:", max_words)
 
-	peacewordcloud.PeaceWordCloud(pdf_file, filter_file, base_file, output_file, group_file, max_words, True)
+	pwc = peacewordcloud.PeaceWordCloud(pdf_file, filter_file, base_file, output_file, group_file, csv_file, max_words, True)
+	pwc.run()
