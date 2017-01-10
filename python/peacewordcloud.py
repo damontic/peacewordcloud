@@ -71,17 +71,38 @@ class PeaceWordCloud():
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
 		self.verbose = verbose
-		groups = self.read_file_as_lower(groups_file)
-		self.printv("GROUPS:", groups)
-		filters = self.read_file_as_lower(filters_file)
-		self.printv("FILTERS:", filters)
+		self.groups = self.read_file_as_lower(groups_file)
+		self.printv("GROUPS:", self.groups)
+		self.filters = self.read_file_as_lower(filters_file)
+		self.printv("FILTERS:", self.filters)
 
-		text = self.read_pdf_file(pdf_file)
+		self.pdf_file = pdf_file
+		self.base_image = base_image
+		self.output_file = output_file
+		self.max_words = max_words
+
+	def run(self):
+		"""
+		This function does the Job. Just to separate the job from the construction of the object.
+		Returns 0 if SUCCESS.
+		Returns 1 if FAILS.
+		"""
+		text = self.read_pdf_file(self.pdf_file)
+
+		if len(text) == 0:
+			print("Couldn't read text from the pdf file!")
+			return 1
+
 		text = self.remove_punctuation(text).lower()
 
-		frecuencies = self.frequency_analysis(text, groups)
+		frecuencies = self.frequency_analysis(text, self.groups)
 
-		self.create_image(base_image, frecuencies, output_file, filters, max_words)
+		if len(frecuencies) != 0:
+			self.create_image(self.base_image, frecuencies, self.output_file, self.filters, self.max_words)
+			return 0
+		else:
+			print("Frecuencies is empty!")
+			return 1
 
 	def read_file_as_lower(self, current_file):
 		"""
@@ -247,4 +268,9 @@ if __name__ == "__main__":
 		sys.exit(2)
 
 	# Begins the program
-	PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, max_words, verbose)
+	pwc = PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, max_words, verbose)
+	result = pwc.run()
+	if result == 0:
+		print("SUCCESS!")
+	else:
+		print("FAILURE!")
