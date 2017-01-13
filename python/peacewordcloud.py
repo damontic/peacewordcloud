@@ -98,26 +98,15 @@ class PeaceWordCloud():
 			return 1
 
 		text = self.remove_punctuation(text).lower()
-
-		frecuencies = self.frequency_analysis(text, self.groups)
-
-		if len(frecuencies) != 0:
-
-			if self.csv_file != None:
-				self.export_csv(frecuencies)
-
-			self.create_image(self.base_image, frecuencies, self.output_file, self.filters, self.max_words)
-			return 0
-		else:
-			print("Frecuencies is empty!")
-			return 1
+		self.create_image(self.base_image, text, self.output_file, self.filters, self.max_words)
+		return 0
 
 	def read_file_as_lower(self, current_file):
 		"""
 		This function reads a file and returns a list of lines in lowercase.
 		"""
 		def lowers_removes_linesep(some_string):
-			if some_string.endswith(os.linesep):
+			if some_string.endswith("\n"):
 				some_string = some_string[:-1]
 			return some_string.lower()
 
@@ -195,7 +184,7 @@ class PeaceWordCloud():
 		# Gets the most common words
 		return FreqDist(tokens).most_common()
 
-	def create_image(self, base_image, frequencies, output_file, filters, maximum_words):
+	def create_image(self, base_image, text, output_file, filters, maximum_words):
 		"""
 		This function creates the image with the wordcloud.
 		"""
@@ -205,7 +194,7 @@ class PeaceWordCloud():
 		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask, stopwords=set(stopwords.words("spanish")+filters))
 
 		# Generate word cloud
-		wc.generate_from_frequencies(frequencies)
+		wc.generate(text)
 
 		# Store to file
 		wc.to_file(output_file)
@@ -224,7 +213,7 @@ class PeaceWordCloud():
 		"""
 		This function creates a csv from the frecuencies.
 		"""
-		f = open(self.csv_file, "w")
+		f = open(self.csv_file, "w", encoding="utf-8")
 		for frecuency in frecuencies:
 			f.write(frecuency[0] + "," + str(frecuency[1]) + "\n")
 		f.close()
