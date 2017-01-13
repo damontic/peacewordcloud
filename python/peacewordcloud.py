@@ -98,7 +98,9 @@ class PeaceWordCloud():
 			return 1
 
 		text = self.remove_punctuation(text).lower()
-		self.create_image(self.base_image, text, self.output_file, self.filters, self.max_words)
+		frecuencies = self.create_image_and_frecuencies(self.base_image, text, self.output_file, self.filters, self.max_words)
+		if self.csv_file != None:
+			self.export_csv(frecuencies)
 		return 0
 
 	def read_file_as_lower(self, current_file):
@@ -184,9 +186,10 @@ class PeaceWordCloud():
 		# Gets the most common words
 		return FreqDist(tokens).most_common()
 
-	def create_image(self, base_image, text, output_file, filters, maximum_words):
+	def create_image_and_frecuencies(self, base_image, text, output_file, filters, maximum_words):
 		"""
 		This function creates the image with the wordcloud.
+		Returns frecuencies
 		"""
 		# Read the mask image
 		base_image_mask = np.array(Image.open(base_image))
@@ -194,10 +197,13 @@ class PeaceWordCloud():
 		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask, stopwords=set(stopwords.words("spanish")+filters))
 
 		# Generate word cloud
-		wc.generate(text)
+		words = wc.process_text(text)
+		wc.generate_from_frequencies(words)
 
 		# Store to file
 		wc.to_file(output_file)
+
+		return [ word for word in words ]
 
 	def remove_punctuation(self, text):
 		"""
