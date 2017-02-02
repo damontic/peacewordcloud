@@ -16,7 +16,7 @@ from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 # NLTK imports
 from nltk import FreqDist
 from nltk.corpus import stopwords
-from nltk.tokenize import MWETokenizer
+from nltk.tokenize import MWETokenizer, word_tokenize
 
 # PIL imports
 from PIL import Image
@@ -91,17 +91,35 @@ class PeaceWordCloud():
 		Returns 0 if SUCCESS.
 		Returns 1 if FAILS.
 		"""
-		text = self.read_pdf_file(self.pdf_file)
+		file_contents = self.read_pdf_file(self.pdf_file)
 
-		if len(text) == 0:
+		if len(file_contents) == 0:
 			print("Couldn't read text from the pdf file!")
 			return 1
 
-		text = self.remove_punctuation(text).lower()
-		frecuencies = self.create_image_and_frecuencies(self.base_image, text, self.output_file, self.filters, self.max_words)
+		file_contents = [ self.remove_punctuation(word) for word in file_contents ]
+		file_contents = self.remove_no_alpha(file_contents)
+		file_contents = [ word.lower() for word in file_contents ]
+
+		if len(file_contents) == 0:
+			print("Couldn't remove no alpha")
+			print("file_contents:", file_contents)
+			return 1
+
+		frecuencies = self.frequency_analysis(file_contents, self.groups)
+
+		if len(frecuencies) == 0:
+			print("Couldn't get frecuencies")
+			print("file_contents:", file_contents)
+			return 1
+
+		self.create_image(self.base_image, frecuencies, self.output_file, self.filters, self.max_words)
 		if self.csv_file != None:
 			self.export_csv(frecuencies)
 		return 0
+
+	def remove_no_alpha(self, text):
+		return [ re.sub(r"[^a-zA-ZñÑáéíóúÁÉÍÓÚ ]","", word) for word in text]
 
 	def read_file_as_lower(self, current_file):
 		"""
@@ -114,7 +132,7 @@ class PeaceWordCloud():
 
 		lines = []
 		if current_file != None:
-			fp = open (current_file,'r')
+			fp = open (current_file,'r', encoding="utf-8")
 			lines = fp.readlines()
 			fp.close()
 			lines = [ lowers_removes_linesep(line) for line in lines ]
@@ -154,13 +172,13 @@ class PeaceWordCloud():
 		interpreter = PDFPageInterpreter(rsrcmgr, pdf_page_aggregator)
 
 		# Process each page contained in the document and adds them to the file_contents string
-		file_contents = ""
+		file_contents = []
 		for page in pdf_doc.get_pages():
 			interpreter.process_page(page)
 			layout = pdf_page_aggregator.get_result()
 			for lt_obj in layout:
 				if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
-					file_contents += lt_obj.get_text()
+					file_contents.append( lt_obj.get_text() )
 
 		fp.close()
 		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
@@ -171,13 +189,12 @@ class PeaceWordCloud():
 		This function uses the NLTK library to make a frecuency analisis.
 		Uses groups as tokens.
 		"""
-		pdf_string = self.remove_punctuation(file_contents)
-
+		
 		# Return a tokenized copy of "pdt_string", using NLTK's recommended word tokenizer
 		tokenizer = MWETokenizer()
 		for group in groups:
 			tokenizer.add_mwe(group.split(" "))
-		tokens = tokenizer.tokenize(pdf_string.split())
+		tokens = tokenizer.tokenize(" ".join(file_contents))
 
 		# Filters the spanish stopwords (hemos, están, estuvimos, etc.)
 		stopwords_esp = stopwords.words('spanish')
@@ -186,7 +203,7 @@ class PeaceWordCloud():
 		# Gets the most common words
 		return FreqDist(tokens).most_common()
 
-	def create_image_and_frecuencies(self, base_image, text, output_file, filters, maximum_words):
+	def create_image(self, base_image, frecuencies, output_file, filters, maximum_words):
 		"""
 		This function creates the image with the wordcloud.
 		Returns frecuencies
@@ -197,20 +214,17 @@ class PeaceWordCloud():
 		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask, stopwords=set(stopwords.words("spanish")+filters))
 
 		# Generate word cloud
-		words = wc.process_text(text)
-		wc.generate_from_frequencies(words)
+		wc.generate_from_frequencies(frecuencies)
 
 		# Store to file
 		wc.to_file(output_file)
-
-		return [ word for word in words ]
 
 	def remove_punctuation(self, text):
 		"""
 		This function removes all the punctuation marks from text.
 		"""
 		# The punctuation variable has the following caracters: !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~¡¿”“•\r´
-		punctuation = string.punctuation + '¡¿”“•\r´'
+		punctuation = string.punctuation + '¡¿”“•\r\n´'
 		# Filters the punctuation marks and lowers all the words
 		transtable = text.maketrans('', '', punctuation)
 		return text.translate(transtable)
