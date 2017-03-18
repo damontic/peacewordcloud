@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # Standard library imports
+from __future__ import print_function
 import os
 import sys
 import getopt
@@ -33,11 +34,11 @@ from wordcloud import WordCloud
 def usage():
 	print("""
 USAGE:
-\tpython""", sys.argv[0], """[OPTIONS] -p input_file.pdf -b base_image.png -o result.png
+\tpython""", sys.argv[0], """[OPTIONS] [-s input_file.txt] [-p input_file.pdf] -b base_image.png -o result.png
 
 OPTIONS:
 \t-p, --pdf=FILE
-\t\tSpecifies the name of the pdf input file to be processed. This option is mandatory.
+\t\tSpecifies the name of the pdf input file to be processed.
 
 \t-b, --base=FILE
 \t\tSpecifies the name of the image file to be used. This option is mandatory.
@@ -59,6 +60,12 @@ OPTIONS:
 \t-m, --max=NUMBER
 \t\tSpecifies a maximum number of words to be drawn on the wordcloud. Defaults to 2000.
 
+\t-s, --save-file
+\t\tSpecifies the name of the file you want to save
+
+\t-l, --load-file
+\t\tSpecifies the name of the file you want to load
+
 \t-h, --help
 \t\tPrints the usage and exits.
 
@@ -69,7 +76,7 @@ class PeaceWordCloud():
 	This class processes a PDF file and generates a Wordcloud using PDFMiner.
 	"""
 
-	def __init__(self, pdf_file, filters_file, base_image, output_file, groups_file, csv_file, max_words, verbose):
+	def __init__(self, pdf_file, filters_file, base_image, output_file, groups_file, csv_file, max_words, load_file, save_file, verbose):
 		"""
 		This function creates the PeaceWordCloud object and begins the processing.
 		"""
@@ -84,6 +91,8 @@ class PeaceWordCloud():
 		self.output_file = output_file
 		self.csv_file = csv_file
 		self.max_words = max_words
+		self.load_file = load_file
+		self.save_filename = save_file
 
 	def run(self):
 		"""
@@ -91,12 +100,16 @@ class PeaceWordCloud():
 		Returns 0 if SUCCESS.
 		Returns 1 if FAILS.
 		"""
-		file_contents = self.read_pdf_file(self.pdf_file)
+		if self.load_file == None:
+			file_contents = self.read_pdf_file(self.pdf_file)
+		else:
+			file_contents = self.process_saved_file(self.load_file)
 
 		if len(file_contents) == 0:
 			print("Couldn't read text from the pdf file!")
 			return 1
 
+		# Begin with some word processing
 		file_contents = [ self.remove_punctuation(word) for word in file_contents ]
 		file_contents = self.remove_no_alpha(file_contents)
 		file_contents = [ word.lower() for word in file_contents ]
@@ -106,17 +119,26 @@ class PeaceWordCloud():
 			print("file_contents:", file_contents)
 			return 1
 
-		frecuencies = self.frequency_analysis(file_contents, self.groups)
+		if self.save_filename != None:
+			flatten = lambda l: [item for sublist in l for item in sublist]
+			file_contents2 = flatten([i.split() for i in file_contents])
+			file_contents2 = self.remove_filters(file_contents2, self.filters)
+			filename = self.save_file(" ".join(file_contents2))
+
+		frecuencies = self.frequency_analysis(file_contents, self.groups, self.filters)
 
 		if len(frecuencies) == 0:
 			print("Couldn't get frecuencies")
 			print("file_contents:", file_contents)
 			return 1
 
-		self.create_image(self.base_image, frecuencies, self.output_file, self.filters, self.max_words)
+		self.create_image(self.base_image, frecuencies, self.output_file, self.max_words)
 		if self.csv_file != None:
 			self.export_csv(frecuencies)
 		return 0
+
+	def remove_filters(self, words, filters):
+		return [ word for word in words if word not in filters ]
 
 	def remove_no_alpha(self, text):
 		return [ re.sub(r"[^a-zA-ZñÑáéíóúÁÉÍÓÚ ]","", word) for word in text]
@@ -173,28 +195,35 @@ class PeaceWordCloud():
 
 		# Process each page contained in the document and adds them to the file_contents string
 		file_contents = []
+		page_num = 0
 		for page in pdf_doc.get_pages():
 			interpreter.process_page(page)
 			layout = pdf_page_aggregator.get_result()
 			for lt_obj in layout:
 				if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
-					file_contents.append( lt_obj.get_text() )
+					file_contents.append( lt_obj.get_text().replace('\t', ' ').replace('\n',' ') )
+			page_num = page_num + 1
+			print("Page Num:", page_num, file=sys.stderr, end="\r")
 
 		fp.close()
 		self.printv("FILE_CONTENTS_LENGTH in CHARACTERS: ", str(len(file_contents)))
 		return file_contents
 
-	def frequency_analysis(self, file_contents, groups):
+	def frequency_analysis(self, file_contents, groups, filters):
 		"""
 		This function uses the NLTK library to make a frecuency analisis.
 		Uses groups as tokens.
 		"""
+
+		flatten = lambda l: [item for sublist in l for item in sublist]
+		file_contents = flatten( [ i.split() for i in file_contents ] )
+		file_contents = self.remove_filters(file_contents, filters)
 		
 		# Return a tokenized copy of "pdt_string", using NLTK's recommended word tokenizer
 		tokenizer = MWETokenizer()
 		for group in groups:
 			tokenizer.add_mwe(group.split(" "))
-		tokens = tokenizer.tokenize(" ".join(file_contents))
+		tokens = tokenizer.tokenize(file_contents)
 
 		# Filters the spanish stopwords (hemos, están, estuvimos, etc.)
 		stopwords_esp = stopwords.words('spanish')
@@ -203,7 +232,7 @@ class PeaceWordCloud():
 		# Gets the most common words
 		return FreqDist(tokens).most_common()
 
-	def create_image(self, base_image, frecuencies, output_file, filters, maximum_words):
+	def create_image(self, base_image, frecuencies, output_file, maximum_words):
 		"""
 		This function creates the image with the wordcloud.
 		Returns frecuencies
@@ -211,7 +240,7 @@ class PeaceWordCloud():
 		# Read the mask image
 		base_image_mask = np.array(Image.open(base_image))
 
-		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask, stopwords=set(stopwords.words("spanish")+filters))
+		wc = WordCloud(background_color="white", max_words=maximum_words, mask=base_image_mask)
 
 		# Generate word cloud
 		wc.generate_from_frequencies(frecuencies)
@@ -245,10 +274,23 @@ class PeaceWordCloud():
 		if self.verbose == True:
 			print(text)
 
+	def save_file(self, contents):
+		new_file = open(self.save_filename, "w", encoding="utf-8")
+		new_file.writelines(contents)
+		new_file.close()
+
+	def process_saved_file(self, saved_file):
+		contents = []
+		to_read_saved_file = open(saved_file, "r", encoding="utf-8")
+		for line in to_read_saved_file.readlines():
+			contents = contents + line.split(" ")
+		to_read_saved_file.close()
+		return contents
+
 if __name__ == "__main__":
 	# Process all the program arguments
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:g:m:c:", ["verbose","help", "output=", "filters=", "pdf=", "base=", "groups=", "max=", "csv="])
+		opts, args = getopt.getopt(sys.argv[1:], "vho:f:p:b:g:m:c:s:l:", ["verbose","help", "output=", "filters=", "pdf=", "base=", "groups=", "max=", "csv=", "save-file=","load-file="])
 	except getopt.GetoptError as err:
 		# print help information and exit:
 		print(str(err))  # will print something like "option -a not recognized"
@@ -258,12 +300,14 @@ if __name__ == "__main__":
 	# Defines the necessary variables
 	verbose = False
 	output_file = None
+	save_file = None
 	filter_file = None
 	group_file = None
 	base_image = None
 	pdf_file = None
 	csv_file = None
 	max_words = 2000
+	load_file=None
 	for option, value in opts:
 		if option in ("-h", "--help"):
 			usage()
@@ -282,6 +326,10 @@ if __name__ == "__main__":
 			group_file = value
 		elif option in ("-c", "--csv"):
 			csv_file = value
+		elif option in ("-l", "--load-file"):
+			load_file = value
+		elif option in ("-s", "--save-file"):
+			save_file = value
 		elif option in ("-m", "--max"):
 			try:
 				max_words = int(value)
@@ -290,14 +338,20 @@ if __name__ == "__main__":
 		else:
 			assert False, "unhandled option"
 
-	# Checks the pdf name and the base image
-	if pdf_file == None or base_image == None or output_file == None:
-		print("The options -b, -p and -o are mandatory.")
+	# Checks the base image and output file
+	if base_image == None or output_file == None:
+		print("The options -b and -o are mandatory.")
 		usage()
 		sys.exit(2)
 
+	# Checks the base image and output file
+	if pdf_file == None and load_file == None:
+		print("You must specify a pdf or a txt file.")
+		usage()
+		sys.exit(3)
+
 	# Begins the program
-	pwc = PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, csv_file, max_words, verbose)
+	pwc = PeaceWordCloud(pdf_file, filter_file, base_image, output_file, group_file, csv_file, max_words, load_file, save_file, verbose)
 	result = pwc.run()
 	if result == 0:
 		print("SUCCESS!")
